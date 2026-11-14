@@ -1,6 +1,8 @@
 -- apache-mod-http2-scanner.nse
 -- Version 1.0.1
--- Copyright 2026 Arturo E. Mata <arturo.mata@gmail.com>
+-- author = "Arturo E. Mata <arturo.mata@gmail.com>"
+-- license = "Apache-2.0 - http://www.apache.org/licenses/LICENSE-2.0"
+-- categories = {"vuln", "discovery", "safe"}
 --
 -- Licensed under the Apache License, Version 2.0 (the "License");
 -- you may not use this file except in compliance with the License.
