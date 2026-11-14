@@ -1,0 +1,348 @@
+================================================================================
+ MANUAL DE USO - apache-mod-http2-scanner.nse  (version 1.0.1)
+ Detector no intrusivo de CVE-2026-119618 (Apache mod_http2)
+================================================================================
+
+AVISO IMPORTANTE
+----------------
+Los rangos de version y los criterios de deteccion provienen UNICAMENTE del
+boletin interno (publicado el 11/11/2026). El CVE no pudo verificarse de forma
+independiente. Confirmelos contra el aviso oficial de Apache antes de usar los
+resultados en produccion:
+  https://httpd.apache.org/security/vulnerabilities_24.html
+
+
+1. INFORMACION GENERAL
+----------------------
+Script      : apache-mod-http2-scanner.nse
+Version     : 1.0.1
+Autor       : Arturo E. Mata <arturo.mata@gmail.com>
+Licencia    : Apache License 2.0 (ver archivo LICENSE)
+CVE         : CVE-2026-119618
+Componente  : Apache HTTP Server mod_http2, funcion assign_headers()
+Impacto     : Corrupcion de memoria / ejecucion remota de codigo
+Severidad   : Critica (CVSS 9.8)
+Afectados   : Apache httpd 2.4.55 a 2.4.70
+              mod_h2 (GitHub) 2.0.8 a 2.0.42
+Corregido en: Apache httpd 2.4.71 o superior
+Categorias  : safe, discovery, vuln
+
+
+2. QUE HACE EL SCRIPT
+---------------------
+NO explota la vulnerabilidad ni envia payloads. Hace tres cosas:
+
+  a) IDENTIFICA EL SERVIDOR (nmap -sV o cabecera Server). Si no es Apache
+     httpd (Tomcat, nginx, Traffic Server...), termina sin mas sondas.
+
+  b) COMPRUEBA HTTP/2:
+     - h2  : negociacion ALPN en un handshake TLS.
+     - h2c : peticion "Upgrade: h2c" en texto plano (espera 101).
+     Si Nmap sabe que el puerto es TLS usa ALPN; si sabe que es texto plano
+     usa h2c; si no lo sabe, prueba h2c y, si no concluye, ALPN.
+
+  c) COMPARA LA VERSION con el rango afectado y emite el veredicto.
+
+Tabla de decision:
+
+  Version               HTTP/2                       Resultado
+  --------------------  ---------------------------  ------------------------
+  En rango              Activo                       VULNERABLE
+  En rango              No detectado (concluyente)   NOT VULNERABLE
+  En rango              No se pudo comprobar         NO CONCLUYENTE
+  Fuera de rango        Cualquiera                   NOT VULNERABLE
+  Oculta (Tokens Prod)  Activo                       LIKELY VULNERABLE *
+  Oculta                No detectado (concluyente)   NOT VULNERABLE
+  Oculta                No se pudo comprobar         NO CONCLUYENTE
+  No es Apache httpd    -                            Sin salida **
+
+  *  Con hidden_version=unknown se muestra NO CONCLUYENTE.
+  ** Con vulns.showall se muestra una nota "No aplica".
+
+
+3. REQUISITOS
+-------------
+  - Nmap 7.x o superior (librerias http, tls, vulns).
+  - Autorizacion para escanear el objetivo.
+  - Conectividad TCP al puerto objetivo.
+
+
+4. INSTALACION
+--------------
+Linux:
+  sudo cp apache-mod-http2-scanner.nse /usr/share/nmap/scripts/
+  sudo nmap --script-updatedb
+
+macOS (Homebrew):
+  sudo cp apache-mod-http2-scanner.nse /opt/homebrew/share/nmap/scripts/
+  sudo nmap --script-updatedb
+
+Windows:
+  Copiar el archivo a C:\Program Files (x86)\Nmap\scripts\
+  y ejecutar:  nmap --script-updatedb
+
+Verificar:
+  nmap --script-help apache-mod-http2-scanner
+
+Tambien puede ejecutarse sin instalar:
+  nmap --script ./apache-mod-http2-scanner.nse <opciones> <objetivo>
+
+
+5. SINTAXIS BASICA
+------------------
+  nmap -p <puertos> --script apache-mod-http2-scanner [opciones] <objetivo>
+
+El objetivo puede ser:
+  - Una IP:         192.168.1.10
+  - Un dominio:     ejemplo.com   (solo hostname, SIN "https://")
+  - Un rango CIDR:  10.0.0.0/24
+  - Una lista:      -iL objetivos.txt
+
+Si solo tiene una URL (https://ejemplo.com/ruta), use el hostname como objetivo
+y el argumento "path" para la ruta.
+
+
+6. EJEMPLOS DE USO
+------------------
+6.1 Escaneo simple por IP
+  nmap -p 80,443,8080,8443 --script apache-mod-http2-scanner 192.168.1.10
+
+6.2 Por dominio
+  nmap -p 80,443 --script apache-mod-http2-scanner ejemplo.com
+
+6.3 Con deteccion de servicio (recomendado)
+  nmap -sV -p 80,443 --script apache-mod-http2-scanner ejemplo.com
+
+6.4 Ver tambien los resultados negativos
+  nmap -sV -p 80,443 --script apache-mod-http2-scanner \
+    --script-args vulns.showall ejemplo.com
+
+6.5 Rango de red / lista de objetivos
+  nmap -p 80,443 --script apache-mod-http2-scanner 10.0.0.0/24
+  nmap -p 80,443 --script apache-mod-http2-scanner -iL objetivos.txt
+
+6.6 Ruta especifica
+  nmap -p 443 --script apache-mod-http2-scanner \
+    --script-args apache-mod-http2-scanner.path=/app/ ejemplo.com
+
+6.7 Forzar el metodo de sondeo (puerto TLS poco habitual)
+  nmap -sV -p 9443 --script apache-mod-http2-scanner \
+    --script-args apache-mod-http2-scanner.ssl=true ejemplo.com
+
+6.8 Tratar la version oculta como "no concluyente"
+  nmap -p 443 --script apache-mod-http2-scanner \
+    --script-args apache-mod-http2-scanner.hidden_version=unknown ejemplo.com
+
+6.9 Ajustar rango y timeout
+  nmap -p 443 --script apache-mod-http2-scanner \
+    --script-args apache-mod-http2-scanner.min=2.4.55,apache-mod-http2-scanner.max=2.4.70,apache-mod-http2-scanner.timeout=8000 \
+    ejemplo.com
+
+6.10 Guardar resultados
+  nmap -p 80,443 --script apache-mod-http2-scanner -oA resultados ejemplo.com
+
+6.11 Host que no responde a ping
+  nmap -Pn -p 80,443 --script apache-mod-http2-scanner ejemplo.com
+
+
+7. ARGUMENTOS DEL SCRIPT
+------------------------
+Se pasan con --script-args, separados por comas.
+
+  apache-mod-http2-scanner.path            Ruta HTTP a consultar.   Def: /
+  apache-mod-http2-scanner.min             Version minima afectada. Def: 2.4.55
+  apache-mod-http2-scanner.max             Version maxima afectada. Def: 2.4.70
+  apache-mod-http2-scanner.timeout         Timeout de sockets (ms). Def: 5000
+  apache-mod-http2-scanner.ssl             true = fuerza ALPN; false = fuerza
+                                           h2c. Def: deteccion automatica.
+  apache-mod-http2-scanner.hidden_version  likely | unknown. Tratamiento de
+                                           Apache con HTTP/2 y version oculta.
+                                           Def: likely
+  http.useragent                           User-Agent de las peticiones HTTP
+                                           (incluida la h2c). Def: Nmap NSE
+  vulns.showall                            Muestra tambien NOT VULNERABLE y
+                                           notas informativas.
+
+Si min/max tienen formato invalido, o hidden_version no es likely/unknown, el
+script devuelve un mensaje de error.
+
+
+8. INTERPRETACION DE RESULTADOS
+-------------------------------
+  VULNERABLE
+      Version en rango y HTTP/2 activo.
+      Accion: verificar localmente (httpd -v) y aplicar la mitigacion.
+
+  LIKELY VULNERABLE
+      Apache con HTTP/2 activo, pero la version esta oculta.
+      Accion: verificar en el servidor con "httpd -v" o "apachectl -v".
+
+  NO CONCLUYENTE
+      No se pudo completar alguna comprobacion (conexion fallida, servidor
+      solo TLS 1.3, filtrado) o la version esta oculta con
+      hidden_version=unknown. Se muestra APARTE, sin el encabezado
+      "VULNERABLE:", para no confundirlo con un positivo.
+      Accion: reintentar con -sV o mayor timeout; verificar localmente.
+
+  NOT VULNERABLE
+      Version fuera de rango, o HTTP/2 no detectado de forma concluyente.
+      Solo se muestra con vulns.showall.
+
+Salida de ejemplo:
+
+  PORT     STATE SERVICE  VERSION
+  8443/tcp open  ssl/http Apache httpd 2.4.70 ((Unix) OpenSSL/3.5.7)
+  | apache-mod-http2-scanner:
+  |   VULNERABLE:
+  |   Apache HTTP Server mod_http2 - corrupcion de memoria / RCE (severidad Critica)
+  |     State: VULNERABLE
+  |     IDs:  CVE:CVE-2026-119618
+  |     Risk factor: High  CVSSv3: 9.8
+  |     Check results:
+  |       Banner/Version: Apache/2.4.70 (nmap -sV)
+  |       HTTP/2 habilitado: SI - h2 (ALPN)
+  |       Rango afectado: 2.4.55 - 2.4.70 (corregido en 2.4.71)
+  |_      Script: apache-mod-http2-scanner v1.0.1
+
+Nota: la libreria vulns de Nmap solo admite High/Medium/Low, por eso aparece
+"Risk factor: High". La severidad real (Critica, CVSS 9.8) figura en el titulo
+y en el campo CVSSv3.
+
+
+9. USO CON PROXY (--proxies)
+----------------------------
+Use --proxies solo si su red sale a Internet por un proxy o si el alcance
+autorizado lo exige. No sirve para "ocultarse".
+
+  - Requiere conexiones TCP completas: use -sT (o -sV y scripts NSE).
+  - Requiere -Pn (el descubrimiento ICMP/ARP no pasa por el proxy).
+  - La resolucion DNS puede hacerse localmente; si es un problema, use la IP.
+  - Suba el timeout a 10000 ms o mas para evitar resultados no concluyentes.
+
+Ejemplo:
+  nmap -sT -Pn -p 443 --proxies socks4://127.0.0.1:9050 \
+    --script apache-mod-http2-scanner \
+    --script-args apache-mod-http2-scanner.timeout=10000 ejemplo.com
+
+
+10. USER-AGENT
+--------------
+  - La prueba ALPN (h2) NO usa User-Agent: es un handshake TLS puro.
+  - http.useragent afecta a la lectura de la cabecera "Server" y a la
+    peticion h2c.
+
+Cambiarlo solo es util si un WAF o CDN bloquea el agente de Nmap (403 o
+conexiones cortadas). En escaneos corporativos use un valor honesto e
+identificable:
+
+  nmap -p 443 --script apache-mod-http2-scanner \
+    --script-args 'http.useragent=SecScan-InternoTI' ejemplo.com
+
+
+11. LIMITACIONES CONOCIDAS
+--------------------------
+  1. Backports de distribuciones (Debian, Ubuntu, RHEL...): pueden corregir la
+     falla sin cambiar la version visible; un VULNERABLE puede ser falso
+     positivo. Confirme con el changelog del paquete.
+  2. ServerTokens Prod oculta la version (LIKELY VULNERABLE o NO CONCLUYENTE).
+  3. mod_h2 de GitHub (2.0.8 a 2.0.42) no es identificable remotamente.
+  4. Un CDN o proxy inverso puede negociar HTTP/2 por su cuenta sin que el
+     backend Apache lo use.
+  5. TLS 1.3 exclusivo: la sonda ALPN usa un ClientHello TLS 1.2, asi que un
+     servidor que solo acepte TLS 1.3 da NO CONCLUYENTE.
+  6. Puertos no estandar: el script se activa por servicio HTTP/HTTPS o puertos
+     habituales (80, 443, 8080, 8443, 8000, 8088, 8180...). En otros use -sV.
+  7. Un WAF o IPS puede bloquear las sondas y causar negativos o resultados
+     no concluyentes.
+
+
+12. SOLUCION DE PROBLEMAS
+-------------------------
+  El script no aparece:
+      Ejecute "sudo nmap --script-updatedb", verifique la ruta de scripts o
+      use --script ./apache-mod-http2-scanner.nse
+
+  No hay salida para un puerto:
+      Es normal si el resultado es NOT VULNERABLE o si el servidor no es
+      Apache httpd. Agregue --script-args vulns.showall para verlo.
+
+  El script no corre en un puerto:
+      El puerto no se reconoce como HTTP. Use -sV.
+
+  NO CONCLUYENTE inesperado:
+      Aumente el timeout; pruebe con -sV; si el puerto es TLS, fuerce
+      ssl=true; recuerde que TLS 1.3 exclusivo no es evaluable.
+
+  Depuracion:
+      nmap -d -p 443 --script apache-mod-http2-scanner ejemplo.com
+      (el script emite trazas de conexion, envio, lectura y parseo)
+
+
+13. PRUEBAS REALIZADAS
+----------------------
+Entornos: laboratorio con Apache 2.4.58 (Ubuntu) y Nmap 7.94; y, con
+resultados aportados por el autor, Docker httpd:2.4.70 con Nmap 7.95 (h2c y
+h2 sobre TLS).
+
+  h2c en texto plano .......................... VULNERABLE            OK
+  h2 con TLS (ALPN) ........................... VULNERABLE            OK
+  h2 con TLS en puerto no reconocido como TLS . VULNERABLE            OK
+  Solo HTTP/1.1 (plano y TLS) ................. NOT VULNERABLE        OK
+  Version fuera de rango (min/max) ............ NOT VULNERABLE        OK
+  Version oculta + h2/h2c ..................... LIKELY VULNERABLE     OK
+  Version oculta + solo HTTP/1.1 .............. NOT VULNERABLE        OK
+  TLS 1.3 exclusivo ........................... NO CONCLUYENTE        OK
+  Apache-Coyote (Tomcat) / servidor Python .... Sin salida / No aplica OK
+  Argumentos ssl, hidden_version, useragent ... OK
+
+SIN PROBAR: objetivos IPv6, una version corregida real (2.4.71) y mod_h2
+independiente de GitHub.
+
+Estas pruebas validan la logica de deteccion contra el rango del boletin. No
+demuestran que una version concreta sea explotable.
+
+Laboratorio reproducible con Docker: ver tests/lab.sh
+  ./tests/lab.sh up && ./tests/lab.sh scan && ./tests/lab.sh down
+
+
+14. MITIGACION (SEGUN EL BOLETIN)
+---------------------------------
+  1. Actualizar Apache HTTP Server a 2.4.71 o superior, o aplicar los parches
+     de la distribucion, primero en un ambiente controlado.
+
+  2. Si no puede actualizar de inmediato, deshabilitar HTTP/2 quitando h2 y h2c
+     de la directiva Protocols:
+
+         Protocols http/1.1
+
+     Luego validar y recargar:
+         apachectl configtest && apachectl graceful
+
+  3. Priorizar los sistemas expuestos a Internet con HTTP/2 habilitado. Las
+     configuraciones solo HTTP/1.1 no requieren medidas de emergencia para
+     esta vulnerabilidad especifica.
+
+  4. Despues de mitigar, volver a ejecutar el script para confirmar el cambio.
+
+
+15. USO RESPONSABLE
+-------------------
+Use este script UNICAMENTE contra sistemas propios o con autorizacion escrita.
+Escanear sistemas ajenos sin permiso puede ser ilegal.
+
+
+16. AUTOR, VERSION Y LICENCIA
+-----------------------------
+Autor   : Arturo E. Mata <arturo.mata@gmail.com>
+Version : 1.0.1
+
+Copyright 2026 Arturo E. Mata.
+
+Distribuido bajo la Apache License, Version 2.0 (archivo LICENSE):
+  http://www.apache.org/licenses/LICENSE-2.0
+
+El software se entrega "TAL CUAL", sin garantias de ningun tipo.
+
+================================================================================
+ Fin del manual
+================================================================================
