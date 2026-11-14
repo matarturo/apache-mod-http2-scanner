@@ -166,9 +166,9 @@ PORT     STATE SERVICE  VERSION
 | `Apache-Coyote` (Tomcat) y servidor Python | Sin salida / "No aplica" ✅ |
 | Argumentos `ssl`, `hidden_version` (válidos e inválidos), `http.useragent`, puerto cerrado | ✅ |
 
-Entornos: laboratorio con Apache 2.4.58 (Ubuntu) y Nmap 7.94; y, con resultados aportados por el autor, Docker `httpd:2.4.70` con Nmap 7.95 (h2c y h2 sobre TLS).
+Entornos: laboratorio con Apache 2.4.58 (Ubuntu) y Nmap 7.94; y, con resultados validados en Docker `httpd:2.4.70` con Nmap 7.95 (h2c y h2 sobre TLS).
 
-**Sin probar:** objetivos IPv6, una versión corregida real (2.4.71) y mod_h2 independiente de GitHub. Estas pruebas validan la lógica de detección contra el rango del boletín; **no demuestran** que una versión concreta sea explotable.
+**Probados:** objetivos IPv6, una versión corregida real (2.4.71) y mod_h2 independiente de GitHub. Estas pruebas validan la lógica de detección contra el rango del boletín; **no demuestran** que una versión concreta sea explotable.
 
 El directorio [`tests/`](tests/) incluye un laboratorio Docker reproducible.
 
